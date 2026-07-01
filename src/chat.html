@@ -1,234 +1,572 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
+<html>
+  <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>即时聊</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Edge Chat · 即刻聊</title>
     <style>
-        /* 全局重置 & 配色 */
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        body { background: #e5ddd5; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        .app { width: 100%; max-width: 480px; height: 100vh; max-height: 800px; background: #fff; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); border-radius: 16px; overflow: hidden; position: relative; }
+      /* ===== 全局重置 & 变量 ===== */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: #f5f7fa;
+        color: #1e293b;
+        height: 100vh;
+        overflow: hidden;
+      }
+      :root {
+        --primary: #2563eb;
+        --primary-light: #3b82f6;
+        --bg-chat: #ffffff;
+        --bg-own: #dbeafe;
+        --border-light: #e2e8f0;
+        --shadow: 0 4px 12px rgba(0,0,0,0.08);
+        --radius: 16px;
+      }
 
-        /* 顶部导航 */
-        .header { background: #075e54; color: #fff; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-        .header h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
-        .header .user-info { display: flex; align-items: center; gap: 12px; font-size: 14px; }
-        .header .user-info input { background: rgba(255,255,255,0.2); border: none; border-radius: 20px; padding: 4px 14px; color: #fff; font-size: 14px; outline: none; width: 100px; transition: 0.3s; }
-        .header .user-info input:focus { width: 140px; background: rgba(255,255,255,0.3); }
-        .header .user-info input::placeholder { color: rgba(255,255,255,0.6); }
-        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #4caf50; margin-right: 6px; }
+      /* ===== 欢迎/姓名表单 ===== */
+      #name-form, #room-form {
+        position: fixed;
+        z-index: 10;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255,255,255,0.92);
+        backdrop-filter: blur(8px);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        padding: 20px;
+      }
+      #name-form input, #room-form input {
+        font-size: 1.8rem;
+        padding: 14px 24px;
+        border: 2px solid var(--border-light);
+        border-radius: 60px;
+        width: min(80%, 400px);
+        outline: none;
+        transition: border-color 0.2s;
+        background: white;
+        text-align: center;
+      }
+      #name-form input:focus, #room-form input:focus {
+        border-color: var(--primary);
+      }
+      #name-form p, #room-form p {
+        margin-top: 24px;
+        font-size: 1rem;
+        color: #64748b;
+        max-width: 480px;
+        line-height: 1.6;
+      }
+      #name-form a, #room-form a {
+        color: var(--primary);
+        text-decoration: none;
+        font-weight: 500;
+      }
+      #room-form button {
+        font-size: 1.2rem;
+        padding: 12px 32px;
+        border: none;
+        border-radius: 60px;
+        background: var(--primary);
+        color: white;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+        margin: 8px;
+        min-width: 120px;
+      }
+      #room-form button:hover {
+        background: var(--primary-light);
+      }
+      #room-form button:active {
+        transform: scale(0.96);
+      }
+      #room-form button:disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      #room-form .or {
+        font-size: 0.9rem;
+        color: #94a3b8;
+        margin: 8px 0;
+      }
+      #go-private {
+        background: #0f172a;
+      }
+      #go-private:hover {
+        background: #1e293b;
+      }
 
-        /* 消息列表 */
-        .messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; background: #e5ddd5; }
-        .message { max-width: 80%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.4; word-break: break-word; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        .message.self { align-self: flex-end; background: #dcf8c6; border-bottom-right-radius: 4px; }
-        .message.other { align-self: flex-start; background: #fff; border-bottom-left-radius: 4px; }
-        .message .name { font-weight: 600; font-size: 13px; color: #075e54; margin-bottom: 2px; }
-        .message .time { font-size: 11px; color: #999; margin-top: 4px; text-align: right; }
-        .system-message { text-align: center; color: #888; font-size: 13px; padding: 6px 0; }
+      /* ===== 主聊天界面 ===== */
+      #chatroom {
+        display: none; /* 初始隐藏，JS会显示 */
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-chat);
+      }
 
-        /* 底部输入区 */
-        .footer { display: flex; padding: 10px 16px; background: #f0f0f0; border-top: 1px solid #ddd; flex-shrink: 0; gap: 10px; align-items: center; }
-        .footer input[type="text"] { flex: 1; border: none; border-radius: 24px; padding: 10px 16px; font-size: 15px; outline: none; background: #fff; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
-        .footer button { background: #075e54; color: #fff; border: none; border-radius: 50%; width: 44px; height: 44px; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .footer button:hover { background: #0b7368; }
-        .footer button:active { transform: scale(0.92); }
+      /* 顶部导航（我们新增的，但保留原有id） */
+      .chat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 20px;
+        background: white;
+        border-bottom: 1px solid var(--border-light);
+        flex-shrink: 0;
+      }
+      .chat-header .room-tag {
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: var(--primary);
+      }
+      .chat-header .user-badge {
+        background: #eef2ff;
+        padding: 4px 14px;
+        border-radius: 30px;
+        font-size: 0.85rem;
+        color: var(--primary);
+      }
 
-        /* 滚动条美化 */
-        .messages::-webkit-scrollbar { width: 5px; }
-        .messages::-webkit-scrollbar-track { background: transparent; }
-        .messages::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+      /* 消息区域 */
+      #chatlog {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 20px;
+        background: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #chatlog p {
+        margin: 0;
+        padding: 8px 14px;
+        border-radius: 20px;
+        max-width: 80%;
+        word-break: break-word;
+        line-height: 1.5;
+        font-size: 0.95rem;
+        background: white;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        align-self: flex-start;
+      }
+      /* 自己发送的消息（通过JS判断，但这里利用类名，我们可以在JS中加类） */
+      /* 但原始JS没有区分自己，我们通过CSS选择器无法区分，所以保留默认样式 */
+      /* 可额外根据发送者判断，但为保持JS不变，我们不增加此特性 */
+      /* 用户若需要区分，可后续微调JS，但现在保持原样 */
 
-        /* 连接状态 */
-        .connection-status { position: absolute; top: 60px; right: 16px; background: rgba(0,0,0,0.7); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 12px; z-index: 10; }
+      #chatlog span.username {
+        font-weight: 700;
+        color: var(--primary);
+        margin-right: 4px;
+      }
+
+      /* 系统消息 (不含名字) */
+      #chatlog p:not(:has(.username)) {
+        background: transparent;
+        box-shadow: none;
+        font-style: italic;
+        color: #64748b;
+        font-size: 0.85rem;
+        padding: 4px 0;
+        max-width: 100%;
+        text-align: center;
+      }
+
+      /* 间隔占位 */
+      #spacer {
+        height: 4px;
+      }
+
+      /* ===== 成员列表 (右侧) ===== */
+      #roster {
+        position: fixed;
+        right: 0;
+        top: 60px; /* 与header对齐 */
+        bottom: 48px;
+        width: 180px;
+        background: white;
+        border-left: 1px solid var(--border-light);
+        padding: 12px 16px;
+        overflow-y: auto;
+        font-weight: 500;
+        font-size: 0.9rem;
+        color: #334155;
+        display: none; /* 默认隐藏，小屏不显示 */
+      }
+      #roster p {
+        margin: 4px 0;
+        padding: 4px 8px;
+        border-radius: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #roster p::before {
+        content: "● ";
+        color: #22c55e;
+        font-size: 0.7rem;
+        vertical-align: middle;
+      }
+
+      @media(min-width: 640px) {
+        #roster { display: block; }
+        #chatlog { margin-right: 180px; }
+      }
+
+      /* ===== 底部输入框 ===== */
+      #chat-input {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 48px;
+        border: none;
+        border-top: 1px solid var(--border-light);
+        padding: 0 20px 0 48px;
+        font-size: 1rem;
+        outline: none;
+        background: white;
+        color: #1e293b;
+        transition: box-shadow 0.2s;
+      }
+      #chat-input:focus {
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+      }
+      #chatroom::before {
+        content: "✉";
+        position: fixed;
+        bottom: 0;
+        left: 14px;
+        width: 32px;
+        height: 48px;
+        line-height: 48px;
+        text-align: center;
+        font-size: 18px;
+        color: #94a3b8;
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      /* ===== 滚动条美化 ===== */
+      #chatlog::-webkit-scrollbar {
+        width: 5px;
+      }
+      #chatlog::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      #chatlog::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+      }
+      #roster::-webkit-scrollbar {
+        width: 3px;
+      }
+      #roster::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+      }
+
+      /* ===== 响应式微调 ===== */
+      @media(max-width: 480px) {
+        #name-form input, #room-form input { font-size: 1.4rem; }
+        #room-form button { font-size: 1rem; padding: 10px 24px; }
+        .chat-header .room-tag { font-size: 0.95rem; }
+        .chat-header .user-badge { font-size: 0.75rem; padding: 2px 12px; }
+        #chatlog p { font-size: 0.9rem; max-width: 90%; }
+      }
+
+      /* 隐藏滚动条 (原代码也有) */
+      ::-webkit-scrollbar {
+        display: none;
+      }
+      /* 但为了可用，我们上面已恢复，下面覆盖回显示？原代码是隐藏，但我们可以显示，用户可自行决定 */
+      /* 这里我们让滚动条显示（美化过的），若要完全隐藏，可注释掉上面的 ::-webkit-scrollbar 块 */
+      /* 但原代码隐藏了，我们保留其隐藏？不，我们显示美观的滚动条，所以去掉 display:none */
+      /* 已在上方定义了滚动条样式，下面覆盖原隐藏 */
+      ::-webkit-scrollbar {
+        display: block;
+        width: 5px;
+      }
+      /* 但原代码在全局隐藏，我们覆盖 */
     </style>
-</head>
-<body>
+  </head>
+  <body>
 
-<div class="app" id="app">
-    <!-- 顶部导航 -->
-    <div class="header">
-        <h1>💬 即时聊</h1>
-        <div class="user-info">
-            <span class="status-dot" id="statusDot"></span>
-            <input type="text" id="usernameInput" placeholder="你的昵称" value="路人甲" maxlength="12">
-        </div>
-    </div>
+    <!-- ===== 原始表单结构不变 ===== -->
+    <form id="name-form" action="/fake-form-action">
+      <input id="name-input" placeholder="你的昵称">
+      <p>基于 Cloudflare Workers Durable Objects 的即时聊天<br>
+        <a href="https://blog.cloudflare.com/introducing-workers-durable-objects" target="_blank">了解技术原理</a></p>
+    </form>
 
-    <!-- 连接状态浮标 -->
-    <div class="connection-status" id="connStatus">● 连接中...</div>
+    <form id="room-form" action="/fake-form-action">
+      <p>加入公共房间</p>
+      <input id="room-name" placeholder="房间名"><button id="go-public">进入</button>
+      <div class="or">—— 或 ——</div>
+      <button id="go-private">🔒 创建私有房间</button>
+    </form>
 
-    <!-- 消息列表 -->
-    <div class="messages" id="messageList"></div>
+    <!-- ===== 聊天主容器 ===== -->
+    <form id="chatroom" action="/fake-form-action">
+      <!-- 新增顶部栏（不影响原功能） -->
+      <div class="chat-header">
+        <span class="room-tag" id="roomDisplay">#房间</span>
+        <span class="user-badge" id="userDisplay">👤 用户</span>
+      </div>
 
-    <!-- 底部输入 -->
-    <div class="footer">
-        <input type="text" id="msgInput" placeholder="输入消息..." autocomplete="off">
-        <button id="sendBtn">➤</button>
-    </div>
-</div>
+      <div id="chatlog">
+        <div id="spacer"></div>
+      </div>
+      <div id="roster"></div>
+      <input id="chat-input" placeholder="输入消息...">
+    </form>
 
-<script>
-    (function() {
-        // --- 配置 ---
-        // 如果你的 Worker 地址不是当前域名，请修改下面这行
-        const WS_URL = `wss://${window.location.host}`; // 默认使用当前域名
-        // 如果想指定固定地址，取消注释并修改：
-        // const WS_URL = "wss://your-project.your-username.workers.dev/";
+    <script type="text/javascript">
+      // ===== 保留原始JS，仅添加微调以更新顶部信息 =====
+      let currentWebSocket = null;
 
-        // --- DOM 引用 ---
-        const messageList = document.getElementById('messageList');
-        const msgInput = document.getElementById('msgInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const usernameInput = document.getElementById('usernameInput');
-        const statusDot = document.getElementById('statusDot');
-        const connStatus = document.getElementById('connStatus');
+      let nameForm = document.querySelector("#name-form");
+      let nameInput = document.querySelector("#name-input");
+      let roomForm = document.querySelector("#room-form");
+      let roomNameInput = document.querySelector("#room-name");
+      let goPublicButton = document.querySelector("#go-public");
+      let goPrivateButton = document.querySelector("#go-private");
+      let chatroom = document.querySelector("#chatroom");
+      let chatlog = document.querySelector("#chatlog");
+      let chatInput = document.querySelector("#chat-input");
+      let roster = document.querySelector("#roster");
 
-        // --- 状态 ---
-        let ws = null;
-        let isConnected = false;
-        let username = usernameInput.value || '路人甲';
+      // 新增：顶部显示元素
+      const roomDisplay = document.getElementById('roomDisplay');
+      const userDisplay = document.getElementById('userDisplay');
 
-        // --- 工具函数 ---
-        function getTime() {
-            const d = new Date();
-            return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+      let isAtBottom = true;
+      let username;
+      let roomname;
+      let hostname = window.location.host;
+      if (hostname == "") {
+        hostname = "edge-chat-demo.cloudflareworkers.com";
+      }
+
+      function startNameChooser() {
+        nameForm.addEventListener("submit", event => {
+          event.preventDefault();
+          username = nameInput.value;
+          if (username.length > 0) {
+            startRoomChooser();
+          }
+        });
+        nameInput.addEventListener("input", event => {
+          if (event.currentTarget.value.length > 32) {
+            event.currentTarget.value = event.currentTarget.value.slice(0, 32);
+          }
+        });
+        nameInput.focus();
+      }
+
+      function startRoomChooser() {
+        nameForm.remove();
+        if (document.location.hash.length > 1) {
+          roomname = document.location.hash.slice(1);
+          startChat();
+          return;
         }
+        roomForm.addEventListener("submit", event => {
+          event.preventDefault();
+          roomname = roomNameInput.value;
+          if (roomname.length > 0) {
+            startChat();
+          }
+        });
+        roomNameInput.addEventListener("input", event => {
+          if (event.currentTarget.value.length > 32) {
+            event.currentTarget.value = event.currentTarget.value.slice(0, 32);
+          }
+        });
+        goPublicButton.addEventListener("click", event => {
+          roomname = roomNameInput.value;
+          if (roomname.length > 0) {
+            startChat();
+          }
+        });
+        goPrivateButton.addEventListener("click", async event => {
+          roomNameInput.disabled = true;
+          goPublicButton.disabled = true;
+          event.currentTarget.disabled = true;
+          let response = await fetch("https://" + hostname + "/api/room", {method: "POST"});
+          if (!response.ok) {
+            alert("something went wrong");
+            document.location.reload();
+            return;
+          }
+          roomname = await response.text();
+          startChat();
+        });
+        roomNameInput.focus();
+      }
 
-        function addMessage(data) {
-            // data: { name, message, timestamp? }
-            const div = document.createElement('div');
-            const isSelf = (data.name === username);
-            div.className = `message ${isSelf ? 'self' : 'other'}`;
-            let html = `<div class="name">${escapeHtml(data.name)}</div>`;
-            html += `<div>${escapeHtml(data.message)}</div>`;
-            html += `<div class="time">${data.timestamp || getTime()}</div>`;
-            div.innerHTML = html;
-            messageList.appendChild(div);
-            // 滚动到底部
-            messageList.scrollTop = messageList.scrollHeight;
+      function startChat() {
+        roomForm.remove();
+        roomname = roomname.replace(/[^a-zA-Z0-9_-]/g, "").replace(/_/g, "-").toLowerCase();
+        if (roomname.length > 32 && !roomname.match(/^[0-9a-f]{64}$/)) {
+          addChatMessage("ERROR", "Invalid room name.");
+          return;
         }
+        document.location.hash = "#" + roomname;
 
-        function addSystemMessage(text) {
-            const div = document.createElement('div');
-            div.className = 'system-message';
-            div.textContent = text;
-            messageList.appendChild(div);
-            messageList.scrollTop = messageList.scrollHeight;
-        }
+        // 更新顶部信息
+        roomDisplay.textContent = '#' + roomname;
+        userDisplay.textContent = '👤 ' + username;
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        chatInput.addEventListener("keydown", event => {
+          if (event.keyCode == 38) {
+            chatlog.scrollBy(0, -50);
+          } else if (event.keyCode == 40) {
+            chatlog.scrollBy(0, 50);
+          } else if (event.keyCode == 33) {
+            chatlog.scrollBy(0, -chatlog.clientHeight + 50);
+          } else if (event.keyCode == 34) {
+            chatlog.scrollBy(0, chatlog.clientHeight - 50);
+          }
+        });
+        chatroom.addEventListener("submit", event => {
+          event.preventDefault();
+          if (currentWebSocket) {
+            currentWebSocket.send(JSON.stringify({message: chatInput.value}));
+            chatInput.value = "";
+            chatlog.scrollBy(0, 1e8);
+          }
+        });
+        chatInput.addEventListener("input", event => {
+          if (event.currentTarget.value.length > 256) {
+            event.currentTarget.value = event.currentTarget.value.slice(0, 256);
+          }
+        });
+        chatlog.addEventListener("scroll", event => {
+          isAtBottom = chatlog.scrollTop + chatlog.clientHeight >= chatlog.scrollHeight;
+        });
+        chatInput.focus();
+        document.body.addEventListener("click", event => {
+          if (window.getSelection().toString() == "") {
+            chatInput.focus();
+          }
+        });
 
-        // --- WebSocket 连接 ---
-        function connect() {
-            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-                return;
+        if('visualViewport' in window) {
+          window.visualViewport.addEventListener('resize', function(event) {
+            if (isAtBottom) {
+              chatlog.scrollBy(0, 1e8);
             }
-            try {
-                ws = new WebSocket(WS_URL);
-                connStatus.textContent = '● 连接中...';
-                connStatus.style.background = 'rgba(255,165,0,0.8)';
-                statusDot.style.background = '#ffa500';
+          });
+        }
 
-                ws.onopen = function() {
-                    isConnected = true;
-                    connStatus.textContent = '● 已连接';
-                    connStatus.style.background = 'rgba(76,175,80,0.8)';
-                    statusDot.style.background = '#4caf50';
-                    addSystemMessage('🟢 已加入聊天室');
-                    // 向服务器发送一条加入消息（可选，根据后端逻辑）
-                    // 有些后端需要第一条消息来注册用户，官方demo不需要
-                };
+        // 显示聊天界面
+        chatroom.style.display = 'flex';
+        join();
+      }
 
-                ws.onmessage = function(event) {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'history') {
-                            // 如果后端发送历史记录（官方demo暂不支持，但可能扩展）
-                            // 这里忽略
-                        } else {
-                            // 标准消息格式 { name, message }
-                            addMessage(data);
-                        }
-                    } catch (e) {
-                        console.warn('解析消息失败:', e);
-                    }
-                };
+      let lastSeenTimestamp = 0;
+      let wroteWelcomeMessages = false;
 
-                ws.onclose = function() {
-                    isConnected = false;
-                    connStatus.textContent = '● 已断开';
-                    connStatus.style.background = 'rgba(244,67,54,0.8)';
-                    statusDot.style.background = '#f44336';
-                    addSystemMessage('🔴 连接已断开，尝试重连...');
-                    setTimeout(connect, 3000);
-                };
+      function join() {
+        const wss = document.location.protocol === "http:" ? "ws://" : "wss://";
+        let ws = new WebSocket(wss + hostname + "/api/room/" + roomname + "/websocket");
+        let rejoined = false;
+        let startTime = Date.now();
 
-                ws.onerror = function(err) {
-                    console.error('WebSocket错误:', err);
-                };
-            } catch (e) {
-                console.error('连接失败:', e);
-                setTimeout(connect, 3000);
+        let rejoin = async () => {
+          if (!rejoined) {
+            rejoined = true;
+            currentWebSocket = null;
+            while (roster.firstChild) {
+              roster.removeChild(roster.firstChild);
             }
-        }
-
-        // --- 发送消息 ---
-        function sendMessage() {
-            if (!isConnected) {
-                addSystemMessage('⚠️ 未连接到服务器，请稍后');
-                return;
+            let timeSinceLastJoin = Date.now() - startTime;
+            if (timeSinceLastJoin < 10000) {
+              await new Promise(resolve => setTimeout(resolve, 10000 - timeSinceLastJoin));
             }
-            const text = msgInput.value.trim();
-            if (!text) return;
-            const name = usernameInput.value.trim() || '匿名';
-            username = name; // 更新本地用户名
-            const payload = JSON.stringify({ name: name, message: text });
-            try {
-                ws.send(payload);
-                // 立即在本地显示（也可以等服务器回显，但为了即时感，先显示）
-                addMessage({ name: name, message: text, timestamp: getTime() });
-                msgInput.value = '';
-                msgInput.focus();
-            } catch (e) {
-                console.error('发送失败:', e);
-                addSystemMessage('❌ 消息发送失败');
+            join();
+          }
+        }
+
+        ws.addEventListener("open", event => {
+          currentWebSocket = ws;
+          ws.send(JSON.stringify({name: username}));
+        });
+
+        ws.addEventListener("message", event => {
+          let data = JSON.parse(event.data);
+          if (data.error) {
+            addChatMessage(null, "* Error: " + data.error);
+          } else if (data.joined) {
+            let p = document.createElement("p");
+            p.innerText = data.joined;
+            roster.appendChild(p);
+          } else if (data.quit) {
+            for (let child of roster.childNodes) {
+              if (child.innerText == data.quit) {
+                roster.removeChild(child);
+                break;
+              }
             }
+          } else if (data.ready) {
+            if (!wroteWelcomeMessages) {
+              wroteWelcomeMessages = true;
+              addChatMessage(null,
+                  "* 此应用基于 Cloudflare Workers Durable Objects 构建。源码：https://github.com/cloudflare/workers-chat-demo");
+              addChatMessage(null,
+                  "* 注意：聊天参与者均为互联网上的随机用户，昵称未经认证，请谨慎保护隐私。");
+              if (roomname.length == 64) {
+                addChatMessage(null,
+                    "* 这是一个私有房间，分享此URL即可邀请他人加入。");
+              } else {
+                addChatMessage(null,
+                    "* 欢迎来到 #" + roomname + "，开始聊天吧！");
+              }
+            }
+          } else {
+            if (data.timestamp > lastSeenTimestamp) {
+              addChatMessage(data.name, data.message);
+              lastSeenTimestamp = data.timestamp;
+            }
+          }
+        });
+
+        ws.addEventListener("close", event => {
+          console.log("WebSocket closed, reconnecting:", event.code, event.reason);
+          rejoin();
+        });
+        ws.addEventListener("error", event => {
+          console.log("WebSocket error, reconnecting:", event);
+          rejoin();
+        });
+      }
+
+      function addChatMessage(name, text) {
+        let p = document.createElement("p");
+        if (name) {
+          let tag = document.createElement("span");
+          tag.className = "username";
+          tag.innerText = name + ": ";
+          p.appendChild(tag);
         }
-
-        // --- 初始化 ---
-        function init() {
-            // 连接
-            connect();
-
-            // 事件绑定
-            sendBtn.addEventListener('click', sendMessage);
-            msgInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    sendMessage();
-                }
-            });
-
-            // 用户名修改后，更新本地变量
-            usernameInput.addEventListener('change', function() {
-                username = this.value.trim() || '匿名';
-                this.value = username;
-            });
+        p.appendChild(document.createTextNode(text));
+        chatlog.appendChild(p);
+        if (isAtBottom) {
+          chatlog.scrollBy(0, 1e8);
         }
+      }
 
-        // 页面加载时启动
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
-    })();
-</script>
-</body>
+      // 启动
+      startNameChooser();
+    </script>
+
+  </body>
 </html>
