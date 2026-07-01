@@ -1,482 +1,234 @@
 <!DOCTYPE html>
-<!--
-  THIS IS NOT THE INTERESTING FILE
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>即时聊</title>
+    <style>
+        /* 全局重置 & 配色 */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background: #e5ddd5; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .app { width: 100%; max-width: 480px; height: 100vh; max-height: 800px; background: #fff; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); border-radius: 16px; overflow: hidden; position: relative; }
 
-  This is just some UI code. There's nothing interesting and unique in this file. The interesting
-  thing about this demo is the server side, which is in chat.mjs.
+        /* 顶部导航 */
+        .header { background: #075e54; color: #fff; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .header h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
+        .header .user-info { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+        .header .user-info input { background: rgba(255,255,255,0.2); border: none; border-radius: 20px; padding: 4px 14px; color: #fff; font-size: 14px; outline: none; width: 100px; transition: 0.3s; }
+        .header .user-info input:focus { width: 140px; background: rgba(255,255,255,0.3); }
+        .header .user-info input::placeholder { color: rgba(255,255,255,0.6); }
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #4caf50; margin-right: 6px; }
 
-  WARNING: This was written by a systems engineer, not a web developer. It's probably bad.
--->
+        /* 消息列表 */
+        .messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; background: #e5ddd5; }
+        .message { max-width: 80%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.4; word-break: break-word; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .message.self { align-self: flex-end; background: #dcf8c6; border-bottom-right-radius: 4px; }
+        .message.other { align-self: flex-start; background: #fff; border-bottom-left-radius: 4px; }
+        .message .name { font-weight: 600; font-size: 13px; color: #075e54; margin-bottom: 2px; }
+        .message .time { font-size: 11px; color: #999; margin-top: 4px; text-align: right; }
+        .system-message { text-align: center; color: #888; font-size: 13px; padding: 6px 0; }
 
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<!--===================================================================================-->
-<!-- Inline style to avoid an extra round trip before the page can render. -->
-<style type="text/css">
-* {
-  box-sizing: border-box;
-}
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
+        /* 底部输入区 */
+        .footer { display: flex; padding: 10px 16px; background: #f0f0f0; border-top: 1px solid #ddd; flex-shrink: 0; gap: 10px; align-items: center; }
+        .footer input[type="text"] { flex: 1; border: none; border-radius: 24px; padding: 10px 16px; font-size: 15px; outline: none; background: #fff; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
+        .footer button { background: #075e54; color: #fff; border: none; border-radius: 50%; width: 44px; height: 44px; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .footer button:hover { background: #0b7368; }
+        .footer button:active { transform: scale(0.92); }
 
-#chatlog {
-  position: fixed;
-  top: 0;
-  bottom: 32px;
-  left: 0;
-  right: 200px;
-  overflow-y: auto;
-  padding: 8px;
-  overflow-wrap: break-word;
-}
-#chatlog span.username {
-  font-weight: bold;
-}
-#spacer {
-  height: calc(100vh - 32px - 5em);
-}
+        /* 滚动条美化 */
+        .messages::-webkit-scrollbar { width: 5px; }
+        .messages::-webkit-scrollbar-track { background: transparent; }
+        .messages::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
 
-#roster {
-  font-weight: bold;
-  padding: 8px;
-}
+        /* 连接状态 */
+        .connection-status { position: absolute; top: 60px; right: 16px; background: rgba(0,0,0,0.7); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 12px; z-index: 10; }
+    </style>
+</head>
+<body>
 
-p {
-  margin-top: 0;
-  margin-bottom: 8px;
-}
-p:last-of-type {
-  margin: 0;
-}
+<div class="app" id="app">
+    <!-- 顶部导航 -->
+    <div class="header">
+        <h1>💬 即时聊</h1>
+        <div class="user-info">
+            <span class="status-dot" id="statusDot"></span>
+            <input type="text" id="usernameInput" placeholder="你的昵称" value="路人甲" maxlength="12">
+        </div>
+    </div>
 
-#roster {
-  position: fixed;
-  right: 0;
-  top: 0;
-  bottom: 32px;
-  width: 200px;
-  border-left: none;
-}
+    <!-- 连接状态浮标 -->
+    <div class="connection-status" id="connStatus">● 连接中...</div>
 
-::-webkit-scrollbar {
-  display: none;
-}
+    <!-- 消息列表 -->
+    <div class="messages" id="messageList"></div>
 
-@media(max-width:600px) {
-  #roster { display: none; }
-  #chatlog { right: 0; }
-}
+    <!-- 底部输入 -->
+    <div class="footer">
+        <input type="text" id="msgInput" placeholder="输入消息..." autocomplete="off">
+        <button id="sendBtn">➤</button>
+    </div>
+</div>
 
-#chat-input {
-  position: fixed;
-  width: 100%;
-  height: 32px;
-  bottom: 0;
-  left: 0;
-  border: none;
-  border-top: none;
-  padding-left: 32px;
-  outline: none;
-}
-#chatroom::before {
-  z-index: 1;
-  display: block;
-  content: ">";
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 32px;
-  height: 32px;
-  line-height: 32px;
-  text-align: center;
-  font-weight: bold;
-  color: #888;
-  -webkit-text-stroke-width: 2px;
-}
+<script>
+    (function() {
+        // --- 配置 ---
+        // 如果你的 Worker 地址不是当前域名，请修改下面这行
+        const WS_URL = `wss://${window.location.host}`; // 默认使用当前域名
+        // 如果想指定固定地址，取消注释并修改：
+        // const WS_URL = "wss://your-project.your-username.workers.dev/";
 
-#name-form {
-  position: fixed;
-  z-index: 3;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: white;
-}
+        // --- DOM 引用 ---
+        const messageList = document.getElementById('messageList');
+        const msgInput = document.getElementById('msgInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const usernameInput = document.getElementById('usernameInput');
+        const statusDot = document.getElementById('statusDot');
+        const connStatus = document.getElementById('connStatus');
 
-#name-input {
-  position: fixed;
-  font-size: 200%;
-  top: calc(50% - 1em);
-  left: calc(50% - 8em);
-  width: 16em;
-  height: 2em;
-  margin: 0;
-  text-align: center;
-  border: 1px solid #bbb;
-}
+        // --- 状态 ---
+        let ws = null;
+        let isConnected = false;
+        let username = usernameInput.value || '路人甲';
 
-#name-form p {
-  position: fixed;
-  top: calc(50% + 3em);
-  width: 100%;
-  text-align: center;
-}
-
-#room-form {
-  position: fixed;
-  z-index: 2;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: white;
-  font-size: 200%;
-  margin-top: calc(50vh - 3em);
-  text-align: center;
-}
-
-#room-name {
-  font-size: inherit;
-  border: 1px solid #bbb;
-  height: 2em;
-  width: 16em;
-  padding-left: 1em;
-}
-
-#room-form button {
-  font-size: inherit;
-  border: 1px solid #bbb;
-  background-color: #eee;
-  height: 2em;
-}
-
-@media(max-width:660px) {
-  #name-input, #room-form { font-size: 150%; }
-  #name-form p { font-size: 75%; }
-}
-@media(max-width:500px) {
-  #name-input, #room-form { font-size: 100%; }
-  #name-form p { font-size: 50%; }
-}
-
-#go-public {
-  width: 4em;
-}
-#go-private {
-  width: 20em;
-}
-
-</style>
-
-<!--===================================================================================-->
-<!-- The actual HTML. There is not much of it. -->
-
-  </head>
-  <body>
-    <form id="name-form" action="/fake-form-action">
-      <input id="name-input" placeholder="your name">
-      <p>This chat runs entirely on the edge, powered by<br>
-        <a href="https://blog.cloudflare.com/introducing-workers-durable-objects" target="_blank">Cloudflare Workers Durable Objects</a></p>
-    </form>
-    <form id="room-form" action="/fake-form-action">
-      <p>Enter a public room:</p>
-      <input id="room-name" placeholder="room name"><button id="go-public">Go &raquo;</button>
-      <p>OR</p>
-      <button id="go-private">Create a Private Room &raquo;</button>
-    </form>
-    <form id="chatroom" action="/fake-form-action">
-      <div id="chatlog">
-        <div id="spacer"></div>
-      </div>
-      <div id="roster"></div>
-      <input id="chat-input">
-    </form>
-  </body>
-
-<!--===================================================================================-->
-<!-- Client-side JavaScript code for the app. -->
-
-<script type="text/javascript">
-let currentWebSocket = null;
-
-let nameForm = document.querySelector("#name-form");
-let nameInput = document.querySelector("#name-input");
-let roomForm = document.querySelector("#room-form");
-let roomNameInput = document.querySelector("#room-name");
-let goPublicButton = document.querySelector("#go-public");
-let goPrivateButton = document.querySelector("#go-private");
-let chatroom = document.querySelector("#chatroom");
-let chatlog = document.querySelector("#chatlog");
-let chatInput = document.querySelector("#chat-input");
-let roster = document.querySelector("#roster");
-
-// Is the chatlog scrolled to the bottom?
-let isAtBottom = true;
-
-let username;
-let roomname;
-
-let hostname = window.location.host;
-if (hostname == "") {
-  // Probably testing the HTML locally.
-  hostname = "edge-chat-demo.cloudflareworkers.com";
-}
-
-function startNameChooser() {
-  nameForm.addEventListener("submit", event => {
-    event.preventDefault();
-    username = nameInput.value;
-    if (username.length > 0) {
-      startRoomChooser();
-    }
-  });
-
-  nameInput.addEventListener("input", event => {
-    if (event.currentTarget.value.length > 32) {
-      event.currentTarget.value = event.currentTarget.value.slice(0, 32);
-    }
-  });
-
-  nameInput.focus();
-}
-
-function startRoomChooser() {
-  nameForm.remove();
-
-  if (document.location.hash.length > 1) {
-    roomname = document.location.hash.slice(1);
-    startChat();
-    return;
-  }
-
-  roomForm.addEventListener("submit", event => {
-    event.preventDefault();
-    roomname = roomNameInput.value;
-    if (roomname.length > 0) {
-      startChat();
-    }
-  });
-
-  roomNameInput.addEventListener("input", event => {
-    if (event.currentTarget.value.length > 32) {
-      event.currentTarget.value = event.currentTarget.value.slice(0, 32);
-    }
-  });
-
-  goPublicButton.addEventListener("click", event => {
-    roomname = roomNameInput.value;
-    if (roomname.length > 0) {
-      startChat();
-    }
-  });
-
-  goPrivateButton.addEventListener("click", async event => {
-    roomNameInput.disabled = true;
-    goPublicButton.disabled = true;
-    event.currentTarget.disabled = true;
-
-    let response = await fetch("https://" + hostname + "/api/room", {method: "POST"});
-    if (!response.ok) {
-      alert("something went wrong");
-      document.location.reload();
-      return;
-    }
-
-    roomname = await response.text();
-    startChat();
-  });
-
-  roomNameInput.focus();
-}
-
-function startChat() {
-  roomForm.remove();
-
-  // Normalize the room name a bit.
-  roomname = roomname.replace(/[^a-zA-Z0-9_-]/g, "").replace(/_/g, "-").toLowerCase();
-
-  if (roomname.length > 32 && !roomname.match(/^[0-9a-f]{64}$/)) {
-    addChatMessage("ERROR", "Invalid room name.");
-    return;
-  }
-
-  document.location.hash = "#" + roomname;
-
-  chatInput.addEventListener("keydown", event => {
-    if (event.keyCode == 38) {
-      // up arrow
-      chatlog.scrollBy(0, -50);
-    } else if (event.keyCode == 40) {
-      // down arrow
-      chatlog.scrollBy(0, 50);
-    } else if (event.keyCode == 33) {
-      // page up
-      chatlog.scrollBy(0, -chatlog.clientHeight + 50);
-    } else if (event.keyCode == 34) {
-      // page down
-      chatlog.scrollBy(0, chatlog.clientHeight - 50);
-    }
-  });
-
-  chatroom.addEventListener("submit", event => {
-    event.preventDefault();
-
-    if (currentWebSocket) {
-      currentWebSocket.send(JSON.stringify({message: chatInput.value}));
-      chatInput.value = "";
-
-      // Scroll to bottom whenever sending a message.
-      chatlog.scrollBy(0, 1e8);
-    }
-  });
-
-  chatInput.addEventListener("input", event => {
-    if (event.currentTarget.value.length > 256) {
-      event.currentTarget.value = event.currentTarget.value.slice(0, 256);
-    }
-  });
-
-  chatlog.addEventListener("scroll", event => {
-    isAtBottom = chatlog.scrollTop + chatlog.clientHeight >= chatlog.scrollHeight;
-  });
-
-  chatInput.focus();
-  document.body.addEventListener("click", event => {
-    // If the user clicked somewhere in the window without selecting any text, focus the chat
-    // input.
-    if (window.getSelection().toString() == "") {
-      chatInput.focus();
-    }
-  });
-
-  // Detect mobile keyboard appearing and disappearing, and adjust the scroll as appropriate.
-  if('visualViewport' in window) {
-    window.visualViewport.addEventListener('resize', function(event) {
-      if (isAtBottom) {
-        chatlog.scrollBy(0, 1e8);
-      }
-    });
-  }
-
-  join();
-}
-
-let lastSeenTimestamp = 0;
-let wroteWelcomeMessages = false;
-
-function join() {
-  // If we are running via wrangler dev, use ws:
-  const wss = document.location.protocol === "http:" ? "ws://" : "wss://";
-  let ws = new WebSocket(wss + hostname + "/api/room/" + roomname + "/websocket");
-  let rejoined = false;
-  let startTime = Date.now();
-
-  let rejoin = async () => {
-    if (!rejoined) {
-      rejoined = true;
-      currentWebSocket = null;
-
-      // Clear the roster.
-      while (roster.firstChild) {
-        roster.removeChild(roster.firstChild);
-      }
-
-      // Don't try to reconnect too rapidly.
-      let timeSinceLastJoin = Date.now() - startTime;
-      if (timeSinceLastJoin < 10000) {
-        // Less than 10 seconds elapsed since last join. Pause a bit.
-        await new Promise(resolve => setTimeout(resolve, 10000 - timeSinceLastJoin));
-      }
-
-      // OK, reconnect now!
-      join();
-    }
-  }
-
-  ws.addEventListener("open", event => {
-    currentWebSocket = ws;
-
-    // Send user info message.
-    ws.send(JSON.stringify({name: username}));
-  });
-
-  ws.addEventListener("message", event => {
-    let data = JSON.parse(event.data);
-
-    if (data.error) {
-      addChatMessage(null, "* Error: " + data.error);
-    } else if (data.joined) {
-      let p = document.createElement("p");
-      p.innerText = data.joined;
-      roster.appendChild(p);
-    } else if (data.quit) {
-      for (let child of roster.childNodes) {
-        if (child.innerText == data.quit) {
-          roster.removeChild(child);
-          break;
+        // --- 工具函数 ---
+        function getTime() {
+            const d = new Date();
+            return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
         }
-      }
-    } else if (data.ready) {
-      // All pre-join messages have been delivered.
-      if (!wroteWelcomeMessages) {
-        wroteWelcomeMessages = true;
-        addChatMessage(null,
-            "* This is a demo app built with Cloudflare Workers Durable Objects. The source code " +
-            "can be found at: https://github.com/cloudflare/workers-chat-demo");
-        addChatMessage(null,
-            "* WARNING: Participants in this chat are random people on the internet. " +
-            "Names are not authenticated; anyone can pretend to be anyone. The people " +
-            "you are chatting with are NOT Cloudflare employees. Chat history is saved.");
-        if (roomname.length == 64) {
-          addChatMessage(null,
-              "* This is a private room. You can invite someone to the room by sending them the URL.");
+
+        function addMessage(data) {
+            // data: { name, message, timestamp? }
+            const div = document.createElement('div');
+            const isSelf = (data.name === username);
+            div.className = `message ${isSelf ? 'self' : 'other'}`;
+            let html = `<div class="name">${escapeHtml(data.name)}</div>`;
+            html += `<div>${escapeHtml(data.message)}</div>`;
+            html += `<div class="time">${data.timestamp || getTime()}</div>`;
+            div.innerHTML = html;
+            messageList.appendChild(div);
+            // 滚动到底部
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function addSystemMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'system-message';
+            div.textContent = text;
+            messageList.appendChild(div);
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // --- WebSocket 连接 ---
+        function connect() {
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            try {
+                ws = new WebSocket(WS_URL);
+                connStatus.textContent = '● 连接中...';
+                connStatus.style.background = 'rgba(255,165,0,0.8)';
+                statusDot.style.background = '#ffa500';
+
+                ws.onopen = function() {
+                    isConnected = true;
+                    connStatus.textContent = '● 已连接';
+                    connStatus.style.background = 'rgba(76,175,80,0.8)';
+                    statusDot.style.background = '#4caf50';
+                    addSystemMessage('🟢 已加入聊天室');
+                    // 向服务器发送一条加入消息（可选，根据后端逻辑）
+                    // 有些后端需要第一条消息来注册用户，官方demo不需要
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'history') {
+                            // 如果后端发送历史记录（官方demo暂不支持，但可能扩展）
+                            // 这里忽略
+                        } else {
+                            // 标准消息格式 { name, message }
+                            addMessage(data);
+                        }
+                    } catch (e) {
+                        console.warn('解析消息失败:', e);
+                    }
+                };
+
+                ws.onclose = function() {
+                    isConnected = false;
+                    connStatus.textContent = '● 已断开';
+                    connStatus.style.background = 'rgba(244,67,54,0.8)';
+                    statusDot.style.background = '#f44336';
+                    addSystemMessage('🔴 连接已断开，尝试重连...');
+                    setTimeout(connect, 3000);
+                };
+
+                ws.onerror = function(err) {
+                    console.error('WebSocket错误:', err);
+                };
+            } catch (e) {
+                console.error('连接失败:', e);
+                setTimeout(connect, 3000);
+            }
+        }
+
+        // --- 发送消息 ---
+        function sendMessage() {
+            if (!isConnected) {
+                addSystemMessage('⚠️ 未连接到服务器，请稍后');
+                return;
+            }
+            const text = msgInput.value.trim();
+            if (!text) return;
+            const name = usernameInput.value.trim() || '匿名';
+            username = name; // 更新本地用户名
+            const payload = JSON.stringify({ name: name, message: text });
+            try {
+                ws.send(payload);
+                // 立即在本地显示（也可以等服务器回显，但为了即时感，先显示）
+                addMessage({ name: name, message: text, timestamp: getTime() });
+                msgInput.value = '';
+                msgInput.focus();
+            } catch (e) {
+                console.error('发送失败:', e);
+                addSystemMessage('❌ 消息发送失败');
+            }
+        }
+
+        // --- 初始化 ---
+        function init() {
+            // 连接
+            connect();
+
+            // 事件绑定
+            sendBtn.addEventListener('click', sendMessage);
+            msgInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // 用户名修改后，更新本地变量
+            usernameInput.addEventListener('change', function() {
+                username = this.value.trim() || '匿名';
+                this.value = username;
+            });
+        }
+
+        // 页面加载时启动
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
         } else {
-          addChatMessage(null,
-              "* Welcome to #" + roomname + ". Say hi!");
+            init();
         }
-      }
-    } else {
-      // A regular chat message.
-      if (data.timestamp > lastSeenTimestamp) {
-        addChatMessage(data.name, data.message);
-        lastSeenTimestamp = data.timestamp;
-      }
-    }
-  });
-
-  ws.addEventListener("close", event => {
-    console.log("WebSocket closed, reconnecting:", event.code, event.reason);
-    rejoin();
-  });
-  ws.addEventListener("error", event => {
-    console.log("WebSocket error, reconnecting:", event);
-    rejoin();
-  });
-}
-
-function addChatMessage(name, text) {
-  let p = document.createElement("p");
-  if (name) {
-    let tag = document.createElement("span");
-    tag.className = "username";
-    tag.innerText = name + ": ";
-    p.appendChild(tag);
-  }
-  p.appendChild(document.createTextNode(text));
-
-  // Append the new chat line, making sure that if the chatlog was scrolled to the bottom
-  // before, it remains scrolled to the bottom, and otherwise the scroll position doesn't
-  // change.
-  chatlog.appendChild(p);
-  if (isAtBottom) {
-    chatlog.scrollBy(0, 1e8);
-  }
-}
-
-startNameChooser();
+    })();
 </script>
-<!--===================================================================================-->
+</body>
 </html>
